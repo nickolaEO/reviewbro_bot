@@ -1,11 +1,18 @@
-...
+import logging
+import os
+import time
+
+import requests
+import telegram
+
+from dotenv import load_dotenv
 
 load_dotenv()
 
 
-PRACTICUM_TOKEN = ...
-TELEGRAM_TOKEN = ...
-TELEGRAM_CHAT_ID = ...
+PRACTICUM_TOKEN = 'AQAAAAAS-oGoAAYckYGLOCqWF0kZvhQ7tPRRLw4'
+TELEGRAM_TOKEN = '5017923016:AAHMNS59tsRu7oTJm2MhkftGdr2S4FM7OQ0'
+TELEGRAM_CHAT_ID = 231315717
 
 RETRY_TIME = 600
 ENDPOINT = 'https://practicum.yandex.ru/api/user_api/homework_statuses/'
@@ -20,28 +27,37 @@ HOMEWORK_STATUSES = {
 
 
 def send_message(bot, message):
-    ...
+    bot.send_message(
+        chat_id=TELEGRAM_CHAT_ID,
+        text=HOMEWORK_STATUSES[message],
+    )
 
 
 def get_api_answer(current_timestamp):
     timestamp = current_timestamp or int(time.time())
     params = {'from_date': timestamp}
-
-    ...
+    homework_statuses = requests.get(
+        ENDPOINT,
+        headers=HEADERS,
+        params=params
+    )
+    return homework_statuses.json()
 
 
 def check_response(response):
-
-    ...
+    if (type(response) == dict) or ('homeworks' in response.keys()):
+        return response['homeworks']
+    else:
+        pass
 
 
 def parse_status(homework):
-    homework_name = ...
-    homework_status = ...
+    homework_name = homework[-1]['homework_name']
+    homework_status = homework[-1]['status']
 
     ...
 
-    verdict = ...
+    verdict = HOMEWORK_STATUSES[homework_status]
 
     ...
 
