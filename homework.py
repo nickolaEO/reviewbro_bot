@@ -2,10 +2,10 @@ import logging
 import os
 import sys
 import time
+from http import HTTPStatus
 
 import requests
 import telegram
-
 from dotenv import load_dotenv
 
 from exceptions import *
@@ -51,7 +51,6 @@ def send_message(bot, message):
 def get_api_answer(current_timestamp):
     """Запрос к эндпоинту API-сервиса Практикум.Домашка."""
     timestamp = current_timestamp or int(time.time())
-    timestamp = 1639224052
     params = {'from_date': timestamp}
     try:
         response = requests.get(
@@ -59,15 +58,16 @@ def get_api_answer(current_timestamp):
             headers=HEADERS,
             params=params
         )
-        if response.status_code != 200:
-            logger.error(
+        if response.status_code != HTTPStatus.OK:
+            message = (
                 f'Сбой в работе программы: Эндпоинт {ENDPOINT} недоступен. '
-                f'Код ответа API: {response.status_code}')
-            raise ExceptionEndpointAvailability(
                 f'Код ответа API: {response.status_code}'
             )
-        return response.json()
-    except ExceptionEndpointAvailability as error:
+            logger.error(message)
+            raise ExceptionEndpointAvailability(message)
+        response = response.json()
+        return response
+    except ValueError as error:
         logger.error(error)
         raise
     except requests.RequestException as error:
@@ -80,68 +80,43 @@ def check_response(response):
     try:
         homeworks = response['homeworks']
         current_date = response['current_date']
-        if homeworks is None:
-            raise ExceptionNoHomeworksKey(
-                'Ответ от API не содержит ключа "homeworks"'
-            )
-        if current_date is None:
-            raise ExceptionNoCurrentDateKey(
-                'Ответ от API не содержит ключа "current_date"'
-            )
         if not isinstance(response, dict):
+            message = 'Ответ от API имеет некорректный тип'
+            logger.error(message)
             raise ExceptionNotCorrectType(
                 'Ответ от API имеет некорректный тип'
             )
         if not isinstance(homeworks, list):
-            raise ExceptionHomeworkNotListType(
-                'Домашки приходят не в виде списка в ответ от API'
-            )
-        if response == {}:
-            raise ExceptionEmptyDict(
-                'Ответ от API содержит пустой словарь'
-            )
+            message = 'Домашки приходят не в виде списка в ответ от API'
+            logger.error(message)
+            raise ExceptionHomeworkNotListType(message)
+        if not response:
+            message = 'Ответ от API содержит пустой словарь'
+            logger.error(message)
+            raise ExceptionEmptyDict(message)
         return homeworks
     except KeyError as error:
         logger.error(
-            f'Ключ {error} отсутствует в словаре'
+            f'Ответ от API не содержит ключа {error} в словаре {response}'
         )
-        raise
-    except (
-            ExceptionNoHomeworksKey,
-            ExceptionNoCurrentDateKey,
-            ExceptionNotCorrectType,
-            ExceptionHomeworkNotListType,
-            ExceptionEmptyDict
-    ) as error:
-        logger.error(error)
         raise
 
 
 def parse_status(homework):
     """Извлечение из списка конкретного ДЗ статуса работы."""
     try:
-        homework_name = homework[0]['homework_name']
-        homework_status = homework[0]['status']
-        if homework_name is None:
-            raise ExceptionHomeworkNameKeyNotFound(
-                'Ожидаемый ключ homework_name не найден'
-            )
-        if homework_status is None:
-            raise ExceptionHomeworkStatusKeyNotFound(
-                'Ожидаемый ключ homework_status не найден'
-            )
+        homework_name = homework.get('homework_name')
+        homework_status = homework.get('status')
+
         verdict = HOMEWORK_STATUSES[homework_status]
-        return f'Изменился статус проверки работы "{homework_name}". {verdict}'
+        return (
+            f'Изменился статус проверки работы "{homework_name}". '
+            f'{verdict}'
+        )
     except KeyError as error:
         logger.error(
-            f'Ключ {error} отсутствует в словаре'
+            f'Ответ от API не содержит ключа {error} в словаре {homework[0]}'
         )
-        raise
-    except (
-            ExceptionHomeworkNameKeyNotFound,
-            ExceptionHomeworkStatusKeyNotFound
-    ) as error:
-        logger.error(error)
         raise
 
 
@@ -173,16 +148,17 @@ def main():
     if not is_token_ok:
         exit()
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
-    # current_timestamp = int(time.time())
-    current_timestamp = 1639224052
+    current_timestamp = int(time.time())
     current_status = ''
-    while is_token_ok:
+    while True:
         try:
             response = get_api_answer(current_timestamp)
             homework_list = check_response(response)
-
-            if homework_list and current_status != homework_list[0].get('status'):
-                current_status = homework_list[0].get('status')
+            if (
+                    homework_list and
+                    current_status != homework_list[0]['status']
+            ):
+                current_status = homework_list[0]['status']
                 message = parse_status(homework_list)
                 send_message(bot, message)
             current_timestamp = int(time.time())
@@ -194,7 +170,6 @@ def main():
             logger.error(message)
             send_message(bot, message)
             time.sleep(RETRY_TIME)
-        is_token_ok = check_tokens()
 
 
 if __name__ == '__main__':
