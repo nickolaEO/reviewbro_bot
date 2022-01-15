@@ -156,8 +156,8 @@ def main():
             response = get_api_answer(current_timestamp)
             homework_list = check_response(response)
             for homework in homework_list:
-                if (homework_list and
-                        current_status != homework['status']):
+                if (homework_list
+                        and current_status != homework['status']):
                     current_status = homework['status']
                     message = parse_status(homework)
                     send_message(bot, message)
