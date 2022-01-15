@@ -8,7 +8,10 @@ import requests
 import telegram
 from dotenv import load_dotenv
 
-from exceptions import *
+from exceptions import (ExceptionEmptyDict,
+                        ExceptionEndpointAvailability,
+                        ExceptionHomeworkNotListType,
+                        ExceptionNotCorrectType)
 
 load_dotenv()
 
@@ -79,7 +82,6 @@ def check_response(response):
     """Проверка ответа API-сервиса на корректность."""
     try:
         homeworks = response['homeworks']
-        current_date = response['current_date']
         if not isinstance(response, dict):
             message = 'Ответ от API имеет некорректный тип'
             logger.error(message)
@@ -107,7 +109,6 @@ def parse_status(homework):
     try:
         homework_name = homework.get('homework_name')
         homework_status = homework.get('status')
-
         verdict = HOMEWORK_STATUSES[homework_status]
         return (
             f'Изменился статус проверки работы "{homework_name}". '
@@ -115,7 +116,7 @@ def parse_status(homework):
         )
     except KeyError as error:
         logger.error(
-            f'Ответ от API не содержит ключа {error} в словаре {homework[0]}'
+            f'Ответ от API не содержит ключа {error} в словаре {homework}'
         )
         raise
 
@@ -154,13 +155,12 @@ def main():
         try:
             response = get_api_answer(current_timestamp)
             homework_list = check_response(response)
-            if (
-                    homework_list and
-                    current_status != homework_list[0]['status']
-            ):
-                current_status = homework_list[0]['status']
-                message = parse_status(homework_list)
-                send_message(bot, message)
+            for homework in homework_list:
+                if (homework_list and
+                        current_status != homework['status']):
+                    current_status = homework['status']
+                    message = parse_status(homework)
+                    send_message(bot, message)
             current_timestamp = int(time.time())
             logger.info(
                 'Изменения статуса отсутствуют, через 10 минут проверим API')
